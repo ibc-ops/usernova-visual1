@@ -5,16 +5,16 @@
 
 /* --- Variable Definitions --- */
 :root {
-    --og-bg-color: #fffdd0; /* Cream */
-    --og-base-text-color: #000000; /* Black */
-    --og-glass-bg: rgba(255, 253, 240, 0.35); /* Lighter Cream with transparency */
-    --og-glass-bg-fallback: rgba(255, 253, 240, 0.85); /* Opaque fallback for older browsers */
-    --og-glass-border-color: rgba(255, 222, 173, 0.4); /* NavajoWhite (incandescent hue) with alpha */
-    --og-shadow-color: rgba(139, 69, 19, 0.15); /* SaddleBrown with alpha for shadow */
-    --og-highlight-color: #ffd700; /* Gold - Incandescent Hue */
-    --og-brown-tone: #8b4513; /* SaddleBrown */
-    --og-border-radius: 16px;
-    --og-backdrop-blur: 12px;
+    --og-bg-color: #f9f9f9;
+    --og-base-text-color: #333333;
+    --og-glass-bg: rgba(255, 255, 255, 0.5);
+    --og-glass-bg-fallback: rgba(255, 255, 255, 0.9);
+    --og-glass-border-color: rgba(0, 0, 0, 0.05);
+    --og-shadow-color: rgba(0, 0, 0, 0.05);
+    --og-highlight-color: #0073aa; /* Standard WP Blue for toggle */
+    --og-brown-tone: #333333; /* For toggle background */
+    --og-border-radius: 12px;
+    --og-backdrop-blur: 10px;
 }
 
 /* --- Global Styles --- */
@@ -101,13 +101,13 @@ body {
 
 /* 2. Dark Mode Color Palette */
 body.dark-mode {
-    --og-bg-color: #1a120b; /* Darkest Brown */
-    --og-base-text-color: #fffaf0; /* FloralWhite, a soft cream */
-    --og-glass-bg: rgba(10, 10, 10, 0.25);
-    --og-glass-bg-fallback: rgba(26, 18, 11, 0.85);
-    --og-glass-border-color: rgba(255, 222, 173, 0.15); /* Fainter incandescent border */
-    --og-shadow-color: rgba(255, 215, 0, 0.1); /* Subtle gold glow instead of a dark shadow */
-    --og-brown-tone: #fffaf0; /* Invert color for the toggle switch body */
+    --og-bg-color: #121212;
+    --og-base-text-color: #e0e0e0;
+    --og-glass-bg: rgba(30, 30, 30, 0.5);
+    --og-glass-bg-fallback: rgba(30, 30, 30, 0.9);
+    --og-glass-border-color: rgba(255, 255, 255, 0.1);
+    --og-shadow-color: rgba(255, 255, 255, 0.05);
+    --og-brown-tone: #e0e0e0; /* For toggle background */
 }
 
 /* 3. Toggle Switch Styles */
@@ -155,4 +155,51 @@ body.dark-mode {
 
 .og-theme-toggle-checkbox:checked + .og-theme-toggle-switch::before {
     transform: translateX(23px);
+}
+
+/* --- Sitewide Glass Container Effect --- */
+
+.og-sitewide-container-effect {
+    position: relative;
+    z-index: 0;
+    background: transparent !important;
+    padding: 2rem;
+    margin: 2rem auto;
+    max-width: 1200px;
+    transition: all 0.4s ease;
+}
+
+.og-sitewide-container-effect::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: -1;
+    background: var(--og-glass-bg-fallback);
+    border: 1px solid var(--og-glass-border-color);
+    border-radius: var(--og-border-radius);
+    box-shadow: 0 8px 32px 0 var(--og-shadow-color);
+    transition: background-color 0.4s ease, box-shadow 0.4s ease, border-color 0.4s ease;
+}
+
+@supports ((-webkit-backdrop-filter: none) or (backdrop-filter: none)) {
+    .og-sitewide-container-effect::before {
+        background: var(--og-glass-bg);
+        -webkit-backdrop-filter: blur(var(--og-backdrop-blur));
+        backdrop-filter: blur(var(--og-backdrop-blur));
+        filter: url('#organic-liquid-distortion');
+    }
+}
+
+/* Responsive adjustments for the sitewide container */
+@media (max-width: 768px) {
+    .og-sitewide-container-effect {
+        padding: 1.5rem 1rem;
+        margin: 1rem auto;
+    }
+    .og-sitewide-container-effect::before {
+        border-radius: 0;
+    }
 }

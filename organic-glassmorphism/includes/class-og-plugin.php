@@ -47,6 +47,7 @@ final class OG_Plugin {
 		if ( is_admin() ) {
 			add_action( 'admin_menu', array( $this, 'add_admin_menu' ) );
 			add_action( 'admin_init', array( $this, 'register_settings' ) );
+			add_action( 'admin_enqueue_scripts', array( $this, 'admin_enqueue_assets' ) );
 		}
 	}
 
@@ -66,49 +67,83 @@ final class OG_Plugin {
 	 * @return string A comma-separated string of CSS selectors.
 	 */
 	public function get_content_selectors() {
+		// A more conservative and modern-theme-focused list of selectors.
+		// `body > .wp-site-blocks` is often the main wrapper in block themes like Twenty Twenty-Four.
 		$default_selectors = array(
-			'#page', '.site-content', 'main', '#main', '.wp-site-blocks', '#primary',
-			'.content-area', '#content', '.site-main', '.main-content',
+			'body > .wp-site-blocks',
+			'#page',
+			'#main',
+			'main',
+			'.site-main',
 		);
 		$selectors = apply_filters( 'organic_glassmorphism_content_selectors', $default_selectors );
-		return implode( ', ', array_unique( array_filter( $selectors ) ) );
+		// We return an array now, to be handled by JavaScript.
+		return array_unique( array_filter( $selectors ) );
 	}
 
 	/**
-	 * Enqueues scripts and styles, and adds dynamic inline CSS.
+	 * Enqueues scripts and styles, and generates a dynamic inline stylesheet
+	 * to override CSS variables with user-defined settings.
 	 */
 	public function enqueue_assets() {
-		wp_enqueue_style(
-			'organic-glassmorphism-core',
-			ORGANIC_GLASSMORPHISM_URL . 'assets/css/style.css',
-			array(),
-			ORGANIC_GLASSMORPHISM_VERSION,
-			'all'
+		wp_enqueue_style( 'organic-glassmorphism-core', ORGANIC_GLASSMORPHISM_URL . 'assets/css/style.css', array(), ORGANIC_GLASSMORPHISM_VERSION );
+
+		// Define the complete set of default values for a more subtle, modern aesthetic.
+		$defaults = array(
+			'og_bg_color'           => '#f9f9f9',
+			'og_base_text_color'    => '#333333',
+			'og_glass_bg_color'     => 'rgba(255, 255, 255, 0.5)',
+			'og_glass_border_color' => 'rgba(0, 0, 0, 0.05)',
+			'og_shadow_color'       => 'rgba(0, 0, 0, 0.05)',
+			'og_backdrop_blur'      => '10',
+			'og_border_radius'      => '12',
 		);
+		$settings = wp_parse_args( get_option( 'og_settings', $defaults ), $defaults );
 
-		$selectors    = $this->get_content_selectors();
-		$options      = get_option( 'organic_glassmorphism_options' );
-		$transparency = isset( $options['og_transparency'] ) ? floatval( $options['og_transparency'] ) : 0.35;
+		// Create a more opaque fallback color from the user's chosen glass background color.
+		$rgba = array();
+		// Default to a safe value if preg_match fails
+		$fallback_rgba = 'rgba(255, 253, 240, 0.85)';
+		if ( preg_match( '/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d(?:\.\d+)?))?\)$/', $settings['og_glass_bg_color'], $rgba ) ) {
+			// Construct fallback with a higher alpha, capped at 1.
+			$alpha = isset($rgba[4]) ? floatval($rgba[4]) : 1;
+			$fallback_alpha = min(1, $alpha + 0.5);
+			$fallback_rgba = 'rgba(' . $rgba[1] . ',' . $rgba[2] . ',' . $rgba[3] . ', ' . $fallback_alpha . ')';
+		}
 
-		$glass_bg_color = "rgba(255, 253, 240, {$transparency})";
-		$fallback_transparency = min( 1, $transparency + 0.5 );
-		$fallback_bg_color     = "rgba(255, 253, 240, {$fallback_transparency})";
-
+		// Generate the dynamic CSS variables.
 		$dynamic_css = "
-			{$selectors} { position: relative; z-index: 0; background: transparent !important; padding: 2rem; margin: 2rem auto; max-width: 1200px; }
-			{$selectors}::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: -1; background: {$fallback_bg_color}; border: 1px solid var(--og-glass-border-color); border-radius: var(--og-border-radius); box-shadow: 0 8px 32px 0 var(--og-shadow-color); transition: background-color 0.4s ease, box-shadow 0.4s ease; }
-			@supports ((-webkit-backdrop-filter: none) or (backdrop-filter: none)) { {$selectors}::before { background: {$glass_bg_color}; -webkit-backdrop-filter: blur(var(--og-backdrop-blur)); backdrop-filter: blur(var(--og-backdrop-blur)); filter: url('#organic-liquid-distortion'); } }
-			@media (max-width: 768px) { {$selectors} { padding: 1.5rem 1rem; margin: 1rem auto; } {$selectors}::before { border-radius: 0; } }
+			:root {
+				--og-bg-color: " . esc_html( $settings['og_bg_color'] ) . ";
+				--og-base-text-color: " . esc_html( $settings['og_base_text_color'] ) . ";
+				--og-glass-bg: " . esc_html( $settings['og_glass_bg_color'] ) . ";
+				--og-glass-bg-fallback: " . esc_html( $fallback_rgba ) . ";
+				--og-glass-border-color: " . esc_html( $settings['og_glass_border_color'] ) . ";
+				--og-shadow-color: " . esc_html( $settings['og_shadow_color'] ) . ";
+				--og-backdrop-blur: " . absint( $settings['og_backdrop_blur'] ) . "px;
+				--og-border-radius: " . absint( $settings['og_border_radius'] ) . "px;
+			}
 		";
+
 		wp_add_inline_style( 'organic-glassmorphism-core', str_replace( array( "\r", "\n", "\t" ), '', $dynamic_css ) );
 
-		wp_enqueue_script(
-			'organic-glassmorphism-main-script',
-			ORGANIC_GLASSMORPHISM_URL . 'assets/js/script.js',
-			array(),
-			ORGANIC_GLASSMORPHISM_VERSION,
-			true
-		);
+		// JavaScript to apply the main container class dynamically.
+		$selectors = $this->get_content_selectors();
+		$js_code = "
+			document.addEventListener('DOMContentLoaded', function() {
+				const selectors = " . json_encode( $selectors ) . ";
+				for ( const selector of selectors ) {
+					const el = document.querySelector( selector );
+					if ( el ) {
+						el.classList.add( 'og-sitewide-container-effect' );
+						break;
+					}
+				}
+			});
+		";
+
+		wp_enqueue_script( 'organic-glassmorphism-main-script', ORGANIC_GLASSMORPHISM_URL . 'assets/js/script.js', array(), ORGANIC_GLASSMORPHISM_VERSION, true );
+		wp_add_inline_script( 'organic-glassmorphism-main-script', str_replace( array( "\r", "\n", "\t" ), '', $js_code ) );
 	}
 
 	/**
@@ -139,6 +174,18 @@ final class OG_Plugin {
 	// --- Admin Methods ---
 
 	/**
+	 * Enqueues scripts and styles for the admin settings page.
+	 */
+	public function admin_enqueue_assets( $hook ) {
+		// Only load on our plugin's settings page
+		if ( 'settings_page_organic_glassmorphism' !== $hook ) {
+			return;
+		}
+		wp_enqueue_style( 'wp-color-picker' );
+		wp_enqueue_script( 'og-admin-script', ORGANIC_GLASSMORPHISM_URL . 'assets/js/admin-script.js', array( 'wp-color-picker' ), ORGANIC_GLASSMORPHISM_VERSION, true );
+	}
+
+	/**
 	 * Adds the admin menu item.
 	 */
 	public function add_admin_menu() {
@@ -161,7 +208,7 @@ final class OG_Plugin {
 		?>
 		<div class="wrap">
 			<h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
-			<p><?php esc_html_e( 'Fine-tune the appearance of the organic glassmorphism effects across your site.', 'organic-glassmorphism' ); ?></p>
+			<p><?php esc_html_e( 'Customize the appearance of the Organic Glassmorphism effects across your site.', 'organic-glassmorphism' ); ?></p>
 			<form action="options.php" method="post">
 				<?php
 				settings_fields( 'organic_glassmorphism_options' );
@@ -174,62 +221,60 @@ final class OG_Plugin {
 	}
 
 	/**
-	 * Registers settings, sections, and fields.
+	 * Registers all settings, sections, and fields for the admin panel.
 	 */
 	public function register_settings() {
-		register_setting(
-			'organic_glassmorphism_options',
-			'organic_glassmorphism_options',
-			array( $this, 'options_sanitize' )
-		);
+		register_setting( 'organic_glassmorphism_options', 'og_settings', array( $this, 'sanitize_settings' ) );
 
-		add_settings_section(
-			'og_main_settings_section',
-			__( 'Core Appearance Settings', 'organic-glassmorphism' ),
-			array( $this, 'main_settings_section_callback' ),
-			'organic_glassmorphism'
-		);
+		// Section 1: Colors
+		add_settings_section( 'og_colors_section', __( 'Color Palette', 'organic-glassmorphism' ), null, 'organic_glassmorphism' );
+		add_settings_field( 'og_bg_color', __( 'Page Background', 'organic-glassmorphism' ), array( $this, 'color_field_cb' ), 'organic_glassmorphism', 'og_colors_section', ['id' => 'og_bg_color', 'default' => '#fffdd0'] );
+		add_settings_field( 'og_base_text_color', __( 'Base Text Color', 'organic-glassmorphism' ), array( $this, 'color_field_cb' ), 'organic_glassmorphism', 'og_colors_section', ['id' => 'og_base_text_color', 'default' => '#000000'] );
+		add_settings_field( 'og_glass_border_color', __( 'Glass Border Color', 'organic-glassmorphism' ), array( $this, 'color_field_cb' ), 'organic_glassmorphism', 'og_colors_section', ['id' => 'og_glass_border_color', 'default' => 'rgba(255, 222, 173, 0.4)'] );
+		add_settings_field( 'og_shadow_color', __( 'Glass Shadow Color', 'organic-glassmorphism' ), array( $this, 'color_field_cb' ), 'organic_glassmorphism', 'og_colors_section', ['id' => 'og_shadow_color', 'default' => 'rgba(139, 69, 19, 0.15)'] );
 
-		add_settings_field(
-			'og_transparency',
-			__( 'Glass Transparency', 'organic-glassmorphism' ),
-			array( $this, 'transparency_field_callback' ),
-			'organic_glassmorphism',
-			'og_main_settings_section'
-		);
+		add_settings_field( 'og_glass_bg_color', __( 'Glass Background', 'organic-glassmorphism' ), array( $this, 'color_field_cb' ), 'organic_glassmorphism', 'og_colors_section', ['id' => 'og_glass_bg_color', 'default' => 'rgba(255, 253, 240, 0.35)'] );
+
+		// Section 2: Effects
+		add_settings_section( 'og_effects_section', __( 'Glass Effects', 'organic-glassmorphism' ), null, 'organic_glassmorphism' );
+		add_settings_field( 'og_backdrop_blur', __( 'Blur Radius (px)', 'organic-glassmorphism' ), array( $this, 'number_field_cb' ), 'organic_glassmorphism', 'og_effects_section', ['id' => 'og_backdrop_blur', 'default' => '12', 'min' => '0', 'max' => '50', 'step' => '1', 'desc' => 'The intensity of the backdrop blur effect.'] );
+		add_settings_field( 'og_border_radius', __( 'Border Radius (px)', 'organic-glassmorphism' ), array( $this, 'number_field_cb' ), 'organic_glassmorphism', 'og_effects_section', ['id' => 'og_border_radius', 'default' => '16', 'min' => '0', 'max' => '100', 'step' => '1', 'desc' => 'The roundness of the corners.'] );
 	}
 
 	/**
-	 * Sanitizes the options array.
-	 * @param array $input The raw input.
-	 * @return array The sanitized input.
+	 * Sanitizes all settings before saving to the database.
 	 */
-	public function options_sanitize( $input ) {
-		$sanitized_input = array();
-		if ( isset( $input['og_transparency'] ) ) {
-			$sanitized_input['og_transparency'] = max( 0, min( 1, floatval( $input['og_transparency'] ) ) );
+	public function sanitize_settings( $input ) {
+		$settings = get_option( 'og_settings', array() );
+		$output = array_merge( $settings, $input );
+
+		// Sanitize Colors
+		if ( isset( $input['og_bg_color'] ) ) $output['og_bg_color'] = sanitize_text_field( $input['og_bg_color'] );
+		if ( isset( $input['og_base_text_color'] ) ) $output['og_base_text_color'] = sanitize_text_field( $input['og_base_text_color'] );
+		if ( isset( $input['og_glass_border_color'] ) ) $output['og_glass_border_color'] = sanitize_text_field( $input['og_glass_border_color'] );
+		if ( isset( $input['og_shadow_color'] ) ) $output['og_shadow_color'] = sanitize_text_field( $input['og_shadow_color'] );
+		if ( isset( $input['og_glass_bg_color'] ) ) $output['og_glass_bg_color'] = sanitize_text_field( $input['og_glass_bg_color'] );
+
+		// Sanitize Effects
+		if ( isset( $input['og_backdrop_blur'] ) ) $output['og_backdrop_blur'] = absint( $input['og_backdrop_blur'] );
+		if ( isset( $input['og_border_radius'] ) ) $output['og_border_radius'] = absint( $input['og_border_radius'] );
+
+		return $output;
+	}
+
+	// --- Field Callbacks ---
+	public function color_field_cb( $args ) {
+		$settings = get_option( 'og_settings' );
+		$value = isset( $settings[$args['id']] ) ? $settings[$args['id']] : $args['default'];
+		echo '<input type="text" name="og_settings[' . esc_attr( $args['id'] ) . ']" value="' . esc_attr( $value ) . '" class="og-color-picker" data-alpha-enabled="true" data-default-color="' . esc_attr( $args['default'] ) . '">';
+	}
+
+	public function number_field_cb( $args ) {
+		$settings = get_option( 'og_settings' );
+		$value = isset( $settings[$args['id']] ) ? $settings[$args['id']] : $args['default'];
+		echo '<input type="number" name="og_settings[' . esc_attr( $args['id'] ) . ']" value="' . esc_attr( $value ) . '" class="small-text" min="' . esc_attr( $args['min'] ) . '" max="' . esc_attr( $args['max'] ) . '" step="' . esc_attr( $args['step'] ) . '">';
+		if ( ! empty( $args['desc'] ) ) {
+			echo '<p class="description">' . esc_html( $args['desc'] ) . '</p>';
 		}
-		return $sanitized_input;
-	}
-
-	/**
-	 * Renders the description for the main settings section.
-	 */
-	public function main_settings_section_callback() {
-		echo '<p>' . esc_html__( 'Adjust the core visual properties of the glassmorphism effect.', 'organic-glassmorphism' ) . '</p>';
-	}
-
-	/**
-	 * Renders the input field for the Glass Transparency setting.
-	 */
-	public function transparency_field_callback() {
-		$options      = get_option( 'organic_glassmorphism_options' );
-		$transparency = isset( $options['og_transparency'] ) ? $options['og_transparency'] : 0.35;
-		?>
-		<input type="number" name="organic_glassmorphism_options[og_transparency]" value="<?php echo esc_attr( $transparency ); ?>" min="0" max="1" step="0.05" class="small-text">
-		<p class="description">
-			<?php esc_html_e( 'Controls the opacity of the glass effect. Enter a value between 0.0 (fully transparent) and 1.0 (fully opaque).', 'organic-glassmorphism' ); ?>
-		</p>
-		<?php
 	}
 }
