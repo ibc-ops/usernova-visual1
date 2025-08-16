@@ -1,0 +1,158 @@
+/*
+ * Organic Glassmorphism - Core Styles
+ * Version: 1.0.0
+ */
+
+/* --- Variable Definitions --- */
+:root {
+    --og-bg-color: #fffdd0; /* Cream */
+    --og-base-text-color: #000000; /* Black */
+    --og-glass-bg: rgba(255, 253, 240, 0.35); /* Lighter Cream with transparency */
+    --og-glass-bg-fallback: rgba(255, 253, 240, 0.85); /* Opaque fallback for older browsers */
+    --og-glass-border-color: rgba(255, 222, 173, 0.4); /* NavajoWhite (incandescent hue) with alpha */
+    --og-shadow-color: rgba(139, 69, 19, 0.15); /* SaddleBrown with alpha for shadow */
+    --og-highlight-color: #ffd700; /* Gold - Incandescent Hue */
+    --og-brown-tone: #8b4513; /* SaddleBrown */
+    --og-border-radius: 16px;
+    --og-backdrop-blur: 12px;
+}
+
+/* --- Global Styles --- */
+/* A subtle background texture helps the glass effect stand out. */
+body {
+    background-color: var(--og-bg-color);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%238b4513' fill-opacity='0.05'%3E%3Cpath opacity='.5' d='M96 95h4v1h-4v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4h-9v4h-1v-4H0v-1h4v-9H0v-1h4v-9H0v-1h4v-9H0v-1h4v-9H0v-1h4v-9H0v-1h4v-9H0v-1h4v-9H0v-1h4v-9H0v-1h4V0h1v4h9V0h1v4h9V0h1v4h9V0h1v4h9V0h1v4h9V0h1v4h9V0h1v4h9V0h1v4h9V0h1v4h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9h4v1h-4v9zm-1 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-9-10h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm9-10v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-9-10h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm9-10v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-10 0v-9h-9v9h9zm-9-10h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9zm10 0h9v-9h-9v9z'/%3E%3Cpath d='M6 5V0h1v5h5v1H6v5H5V6H0V5h6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    color: var(--og-base-text-color);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+}
+
+/* --- Glass Card Component (Requirement 2) --- */
+.glass-card {
+	position: relative;
+	z-index: 0;
+	background: transparent; /* Card itself is transparent */
+	padding: 1.5rem;
+	margin-bottom: 1.5rem;
+	transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.glass-card::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: -1;
+	border-radius: var(--og-border-radius);
+	background: var(--og-glass-bg-fallback); /* Fallback for older browsers */
+	border: 1px solid var(--og-glass-border-color);
+	box-shadow: 0 4px 20px 0 var(--og-shadow-color);
+	transition: box-shadow 0.3s ease;
+}
+
+/* Override with full glass effect for modern browsers */
+@supports ((-webkit-backdrop-filter: none) or (backdrop-filter: none)) {
+	.glass-card::before {
+		background: var(--og-glass-bg);
+		-webkit-backdrop-filter: blur(var(--og-backdrop-blur));
+		backdrop-filter: blur(var(--og-backdrop-blur));
+		filter: url('#organic-liquid-distortion');
+	}
+}
+
+.glass-card:hover {
+	transform: scale(1.02) translateY(-5px);
+}
+
+.glass-card:hover::before {
+	box-shadow: 0 12px 28px 0 var(--og-shadow-color);
+}
+
+/* Ensure readability inside cards */
+.glass-card, .glass-card * {
+    color: var(--og-base-text-color) !important; /* Use important to override theme styles if necessary */
+    text-shadow: 0 1px 1px rgba(255,255,255,0.2);
+}
+
+/* --- Responsive & Performance Optimizations --- */
+@media (max-width: 768px) {
+    :root {
+        /* Reduce blur intensity on mobile to improve performance */
+        --og-backdrop-blur: 6px;
+    }
+
+    .glass-card {
+        padding: 1.25rem;
+    }
+}
+
+/* --- Dark/Normal Mode Toggle & Palette --- */
+
+/* 1. Add transitions for smooth animation */
+body {
+    transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+.glass-card::before {
+    /* Also transition background-color for dark mode */
+    transition: box-shadow 0.3s ease, background-color 0.4s ease;
+}
+
+/* 2. Dark Mode Color Palette */
+body.dark-mode {
+    --og-bg-color: #1a120b; /* Darkest Brown */
+    --og-base-text-color: #fffaf0; /* FloralWhite, a soft cream */
+    --og-glass-bg: rgba(10, 10, 10, 0.25);
+    --og-glass-bg-fallback: rgba(26, 18, 11, 0.85);
+    --og-glass-border-color: rgba(255, 222, 173, 0.15); /* Fainter incandescent border */
+    --og-shadow-color: rgba(255, 215, 0, 0.1); /* Subtle gold glow instead of a dark shadow */
+    --og-brown-tone: #fffaf0; /* Invert color for the toggle switch body */
+}
+
+/* 3. Toggle Switch Styles */
+.og-theme-toggle-container {
+    position: fixed;
+    bottom: 25px;
+    right: 25px;
+    z-index: 9999;
+}
+
+.og-theme-toggle-checkbox {
+    display: none; /* Hide the actual checkbox input */
+}
+
+.og-toggle-label {
+    cursor: pointer;
+}
+
+.og-theme-toggle-switch {
+    width: 52px;
+    height: 28px;
+    background-color: var(--og-brown-tone);
+    border-radius: 14px;
+    position: relative;
+    transition: background-color 0.3s ease;
+    display: block;
+}
+
+.og-theme-toggle-switch::before {
+    content: '';
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    top: 3px;
+    left: 4px;
+    background-color: var(--og-bg-color); /* Knob color matches the page background */
+    transition: transform 0.3s ease, background-color 0.4s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.og-theme-toggle-checkbox:checked + .og-theme-toggle-switch {
+    background-color: var(--og-highlight-color);
+}
+
+.og-theme-toggle-checkbox:checked + .og-theme-toggle-switch::before {
+    transform: translateX(23px);
+}
