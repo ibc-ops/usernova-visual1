@@ -53,33 +53,24 @@ final class OG_Plugin {
 	}
 
 	public function enqueue_assets() {
+		// Enqueue the main static stylesheet.
 		wp_enqueue_style( 'organic-glassmorphism-core', ORGANIC_GLASSMORPHISM_URL . 'assets/css/style.css', array(), ORGANIC_GLASSMORPHISM_VERSION );
 
-		$defaults = $this->get_default_settings();
-		$settings = wp_parse_args( get_option( 'og_settings', $defaults ), $defaults );
-
-		$rgba = array();
-		$fallback_rgba = 'rgba(255, 255, 255, 0.9)';
-		if ( preg_match( '/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d(?:\.\d+)?))?\)$/', $settings['og_glass_bg_color'], $rgba ) ) {
-			$alpha = isset($rgba[4]) ? floatval($rgba[4]) : 1;
-			$fallback_alpha = min(1, $alpha + 0.5);
-			$fallback_rgba = 'rgba(' . $rgba[1] . ',' . $rgba[2] . ',' . $rgba[3] . ', ' . $fallback_alpha . ')';
+		// Enqueue the dynamic stylesheet if it exists, using a timestamp for cache busting.
+		$dynamic_css_path = $this->get_upload_dir_path() . '/dynamic.css';
+		if ( file_exists( $dynamic_css_path ) ) {
+			wp_enqueue_style(
+				'organic-glassmorphism-dynamic',
+				$this->get_upload_dir_url() . '/dynamic.css',
+				array( 'organic-glassmorphism-core' ),
+				get_option( 'og_styles_timestamp' )
+			);
 		}
 
-		$dynamic_css = "
-			:root {
-				--og-bg-color: " . esc_html( $settings['og_bg_color'] ) . ";
-				--og-base-text-color: " . esc_html( $settings['og_base_text_color'] ) . ";
-				--og-glass-bg: " . esc_html( $settings['og_glass_bg_color'] ) . ";
-				--og-glass-bg-fallback: " . esc_html( $fallback_rgba ) . ";
-				--og-glass-border-color: " . esc_html( $settings['og_glass_border_color'] ) . ";
-				--og-shadow-color: " . esc_html( $settings['og_shadow_color'] ) . ";
-				--og-backdrop-blur: " . absint( $settings['og_backdrop_blur'] ) . "px;
-				--og-border-radius: " . absint( $settings['og_border_radius'] ) . "px;
-			}
-		";
-		wp_add_inline_style( 'organic-glassmorphism-core', str_replace( array( "\r", "\n", "\t" ), '', $dynamic_css ) );
+		// Enqueue the frontend JavaScript for the theme toggle.
+		wp_enqueue_script( 'organic-glassmorphism-main-script', ORGANIC_GLASSMORPHISM_URL . 'assets/js/script.js', array(), ORGANIC_GLASSMORPHISM_VERSION, true );
 
+		// JavaScript to apply the main container class dynamically.
 		$selectors = $this->get_content_selectors();
 		$js_code = "
 			document.addEventListener('DOMContentLoaded', function() {
@@ -93,8 +84,6 @@ final class OG_Plugin {
 				}
 			});
 		";
-
-		wp_enqueue_script( 'organic-glassmorphism-main-script', ORGANIC_GLASSMORPHISM_URL . 'assets/js/script.js', array(), ORGANIC_GLASSMORPHISM_VERSION, true );
 		wp_add_inline_script( 'organic-glassmorphism-main-script', str_replace( array( "\r", "\n", "\t" ), '', $js_code ) );
 	}
 
@@ -185,7 +174,86 @@ final class OG_Plugin {
 		foreach($int_keys as $key) {
 			if (isset($input[$key])) $output[$key] = absint($input[$key]);
 		}
+
+		// After sanitizing, save the new settings to the dynamic stylesheet.
+		$this->save_dynamic_stylesheet( $output );
+
 		return $output;
+	}
+
+	/**
+	 * Gets the path to the custom uploads directory.
+	 * @return string
+	 */
+	private function get_upload_dir_path() {
+		$upload_dir = wp_upload_dir();
+		return trailingslashit( $upload_dir['basedir'] ) . 'organic-glassmorphism';
+	}
+
+	/**
+	 * Gets the URL to the custom uploads directory.
+	 * @return string
+	 */
+	private function get_upload_dir_url() {
+		$upload_dir = wp_upload_dir();
+		return trailingslashit( $upload_dir['baseurl'] ) . 'organic-glassmorphism';
+	}
+
+	/**
+	 * Generates and saves the dynamic CSS file.
+	 * @param array $settings The sanitized settings array.
+	 * @return bool True on success, false on failure.
+	 */
+	public function save_dynamic_stylesheet( $settings ) {
+		if ( empty( $settings ) ) {
+			return false;
+		}
+
+		global $wp_filesystem;
+		if ( ! $wp_filesystem ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+			WP_Filesystem();
+		}
+
+		$upload_path = $this->get_upload_dir_path();
+
+		if ( ! $wp_filesystem->is_dir( $upload_path ) ) {
+			$wp_filesystem->mkdir( $upload_path, 0755 );
+		}
+
+		$defaults = $this->get_default_settings();
+		$settings = wp_parse_args( $settings, $defaults );
+
+		$rgba = array();
+		$fallback_rgba = 'rgba(255, 255, 255, 0.9)';
+		if ( preg_match( '/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d(?:\.\d+)?))?\)$/', $settings['og_glass_bg_color'], $rgba ) ) {
+			$alpha = isset($rgba[4]) ? floatval($rgba[4]) : 1;
+			$fallback_alpha = min(1, $alpha + 0.5);
+			$fallback_rgba = 'rgba(' . $rgba[1] . ',' . $rgba[2] . ',' . $rgba[3] . ', ' . $fallback_alpha . ')';
+		}
+
+		$css_content = "
+			:root {
+				--og-bg-color: " . esc_html( $settings['og_bg_color'] ) . ";
+				--og-base-text-color: " . esc_html( $settings['og_base_text_color'] ) . ";
+				--og-glass-bg: " . esc_html( $settings['og_glass_bg_color'] ) . ";
+				--og-glass-bg-fallback: " . esc_html( $fallback_rgba ) . ";
+				--og-glass-border-color: " . esc_html( $settings['og_glass_border_color'] ) . ";
+				--og-shadow-color: " . esc_html( $settings['og_shadow_color'] ) . ";
+				--og-backdrop-blur: " . absint( $settings['og_backdrop_blur'] ) . "px;
+				--og-border-radius: " . absint( $settings['og_border_radius'] ) . "px;
+			}
+		";
+
+		$file_path = trailingslashit( $upload_path ) . 'dynamic.css';
+		$result = $wp_filesystem->put_contents( $file_path, str_replace( array( "\r", "\n", "\t" ), '', $css_content ) );
+
+		if ( $result ) {
+			update_option( 'og_styles_timestamp', time(), false );
+			return true;
+		}
+
+		return false;
 	}
 
 	public function get_default_settings() {
@@ -263,6 +331,27 @@ final class OG_Plugin {
 		echo '<input type="number" id="' . esc_attr($args['id']) . '" name="og_settings[' . esc_attr( $args['id'] ) . ']" value="' . esc_attr( $value ) . '" class="small-text">';
 		if ( ! empty( $args['desc'] ) ) {
 			echo '<p class="description">' . esc_html( $args['desc'] ) . '</p>';
+		}
+	}
+
+	/**
+	 * Cleans up plugin data on deactivation.
+	 */
+	public function on_deactivation() {
+		// Delete the timestamp option
+		delete_option( 'og_styles_timestamp' );
+		// Note: We don't delete the main 'og_settings' on deactivation, only on uninstall.
+
+		// Delete the dynamic stylesheet and its directory
+		global $wp_filesystem;
+		if ( ! $wp_filesystem ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+			WP_Filesystem();
+		}
+
+		$upload_path = $this->get_upload_dir_path();
+		if ( $wp_filesystem->is_dir( $upload_path ) ) {
+			$wp_filesystem->rmdir( $upload_path, true ); // true for recursive
 		}
 	}
 }

@@ -35,6 +35,7 @@ require_once ORGANIC_GLASSMORPHISM_PATH . 'includes/class-og-plugin.php';
 function organic_glassmorphism_run() {
 	return OG_Plugin::instance();
 }
+$og_plugin_instance = organic_glassmorphism_run();
 
-// Let's get this party started.
-organic_glassmorphism_run();
+// Register the deactivation hook to clean up when the plugin is deactivated.
+register_deactivation_hook( __FILE__, array( $og_plugin_instance, 'on_deactivation' ) );
