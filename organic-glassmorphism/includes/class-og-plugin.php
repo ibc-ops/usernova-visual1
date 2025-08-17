@@ -37,6 +37,7 @@ final class OG_Plugin {
 			add_action( 'admin_menu', array( $this, 'add_admin_menu' ) );
 			add_action( 'admin_init', array( $this, 'register_settings' ) );
 			add_action( 'admin_enqueue_scripts', array( $this, 'admin_enqueue_assets' ) );
+			add_action( 'admin_notices', array( $this, 'display_admin_notices' ) );
 		}
 	}
 
@@ -164,16 +165,23 @@ final class OG_Plugin {
 	}
 
 	public function sanitize_settings( $input ) {
-		$settings = get_option( 'og_settings', array() );
-		$output = array_merge( $settings, $input );
-		$color_keys = ['og_bg_color', 'og_base_text_color', 'og_glass_bg_color', 'og_glass_border_color', 'og_shadow_color'];
-		foreach($color_keys as $key) {
-			if (isset($input[$key])) $output[$key] = sanitize_text_field($input[$key]);
+		$output   = array();
+		$defaults = $this->get_default_settings();
+
+		// Sanitize Colors
+		$color_keys = array( 'og_bg_color', 'og_base_text_color', 'og_glass_bg_color', 'og_glass_border_color', 'og_shadow_color' );
+		foreach ( $color_keys as $key ) {
+			$output[ $key ] = isset( $input[ $key ] ) ? sanitize_text_field( $input[ $key ] ) : $defaults[ $key ];
 		}
-		$int_keys = ['og_backdrop_blur', 'og_border_radius'];
-		foreach($int_keys as $key) {
-			if (isset($input[$key])) $output[$key] = absint($input[$key]);
+
+		// Sanitize Effects
+		$int_keys = array( 'og_backdrop_blur', 'og_border_radius' );
+		foreach ( $int_keys as $key ) {
+			$output[ $key ] = isset( $input[ $key ] ) ? absint( $input[ $key ] ) : $defaults[ $key ];
 		}
+
+		// Pass through the preset choice.
+		$output['og_design_preset'] = isset( $input['og_design_preset'] ) ? sanitize_text_field( $input['og_design_preset'] ) : 'default';
 
 		// After sanitizing, save the new settings to the dynamic stylesheet.
 		$this->save_dynamic_stylesheet( $output );
@@ -181,29 +189,16 @@ final class OG_Plugin {
 		return $output;
 	}
 
-	/**
-	 * Gets the path to the custom uploads directory.
-	 * @return string
-	 */
 	private function get_upload_dir_path() {
 		$upload_dir = wp_upload_dir();
 		return trailingslashit( $upload_dir['basedir'] ) . 'organic-glassmorphism';
 	}
 
-	/**
-	 * Gets the URL to the custom uploads directory.
-	 * @return string
-	 */
 	private function get_upload_dir_url() {
 		$upload_dir = wp_upload_dir();
 		return trailingslashit( $upload_dir['baseurl'] ) . 'organic-glassmorphism';
 	}
 
-	/**
-	 * Generates and saves the dynamic CSS file.
-	 * @param array $settings The sanitized settings array.
-	 * @return bool True on success, false on failure.
-	 */
 	public function save_dynamic_stylesheet( $settings ) {
 		if ( empty( $settings ) ) {
 			return false;
@@ -217,8 +212,12 @@ final class OG_Plugin {
 
 		$upload_path = $this->get_upload_dir_path();
 
+		// Create the directory if it doesn't exist.
 		if ( ! $wp_filesystem->is_dir( $upload_path ) ) {
-			$wp_filesystem->mkdir( $upload_path, 0755 );
+			if ( ! $wp_filesystem->mkdir( $upload_path, 0755 ) ) {
+				set_transient( 'og_admin_notice', array( 'type' => 'error', 'message' => 'Error: Could not create plugin directory in uploads folder.' ), 30 );
+				return false;
+			}
 		}
 
 		$defaults = $this->get_default_settings();
@@ -250,9 +249,11 @@ final class OG_Plugin {
 
 		if ( $result ) {
 			update_option( 'og_styles_timestamp', time(), false );
+			set_transient( 'og_admin_notice', array( 'type' => 'success', 'message' => 'Settings saved and stylesheet updated successfully.' ), 30 );
 			return true;
 		}
 
+		set_transient( 'og_admin_notice', array( 'type' => 'error', 'message' => 'Error: Could not write to dynamic stylesheet.' ), 30 );
 		return false;
 	}
 
@@ -260,10 +261,6 @@ final class OG_Plugin {
 		return $this->get_design_presets()['default'];
 	}
 
-	/**
-	 * Defines the settings for all design presets.
-	 * @return array
-	 */
 	public function get_design_presets() {
 		return array(
 			'default' => array(
@@ -334,9 +331,6 @@ final class OG_Plugin {
 		}
 	}
 
-	/**
-	 * Cleans up plugin data on deactivation.
-	 */
 	public function on_deactivation() {
 		// Delete the timestamp option
 		delete_option( 'og_styles_timestamp' );
@@ -352,6 +346,22 @@ final class OG_Plugin {
 		$upload_path = $this->get_upload_dir_path();
 		if ( $wp_filesystem->is_dir( $upload_path ) ) {
 			$wp_filesystem->rmdir( $upload_path, true ); // true for recursive
+		}
+	}
+
+	public function display_admin_notices() {
+		if ( $notice = get_transient( 'og_admin_notice' ) ) {
+			$type    = isset( $notice['type'] ) ? $notice['type'] : 'info';
+			$message = isset( $notice['message'] ) ? $notice['message'] : '';
+
+			if ( $message ) {
+				printf(
+					'<div class="notice notice-%1$s is-dismissible"><p>%2$s</p></div>',
+					esc_attr( $type ),
+					wp_kses_post( $message )
+				);
+			}
+			delete_transient( 'og_admin_notice' );
 		}
 	}
 }
